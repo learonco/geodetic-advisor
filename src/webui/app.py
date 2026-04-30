@@ -12,6 +12,7 @@ sys.path.insert(0, str(project_root))
 import streamlit as st  # noqa: E402
 
 from src.models.geodesy import BoundingBox  # noqa: E402
+from src.agents.geodetic import create_geodetic_agent  # noqa: E402
 from src.webui.chat_utils import (  # noqa: E402
     detect_map_relevant_response,
     invoke_geodetic_agent,
@@ -89,7 +90,6 @@ footer { display: none !important; }
 # ---------------------------------------------------------------------------
 with st.sidebar:
     st.title("🗺️ Geodetic Advisor")
-    st.caption("Powered by LangChain + Google Gemini")
     st.divider()
     st.markdown(
         "Chat with an AI assistant about **coordinate reference systems**, "
@@ -97,12 +97,25 @@ with st.sidebar:
     )
     st.divider()
 
-    api_key = os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY")
-    if api_key:
-        st.success("✅ API key detected")
-    else:
-        st.warning("⚠️ No API key found. Set `GOOGLE_API_KEY` in your environment.")
+    # Gemini API key — sidebar input overrides env var
+    env_key = os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY") or ""
+    gemini_key_input = st.text_input(
+        "Gemini API Key",
+        value=env_key,
+        type="password",
+        placeholder="Leave blank to use Ollama (local)",
+        help="Enter your Google Gemini API key, or leave blank to use a local Ollama model.",
+    )
+    resolved_key: str | None = gemini_key_input.strip() or None
 
+    if resolved_key:
+        st.success("✅ Using Gemini")
+        provider_label = "LangChain + Google Gemini"
+    else:
+        st.info("🦙 Using Ollama (local)")
+        provider_label = "LangChain + Ollama (local)"
+
+    st.caption(f"Powered by {provider_label}")
     st.divider()
     st.caption("Data: EPSG Registry via pyproj")
 
@@ -114,6 +127,12 @@ if "messages" not in st.session_state:
 
 if "agent_state" not in st.session_state:
     st.session_state.agent_state = {"last_bbox": None, "last_results": [], "last_geojson": None}
+
+# Build or rebuild the agent when the resolved key changes
+_prev_key = st.session_state.get("_resolved_key", ...)
+if _prev_key is ... or _prev_key != resolved_key:
+    st.session_state["agent"] = create_geodetic_agent(resolved_key)
+    st.session_state["_resolved_key"] = resolved_key
 
 # ---------------------------------------------------------------------------
 # Layout: map left (55 %) | chat right (45 %)
@@ -156,6 +175,7 @@ with col_chat:
         if st.button("🗑️ Clear conversation", use_container_width=True):
             st.session_state.messages = []
             st.session_state.agent_state = {"last_bbox": None, "last_results": [], "last_geojson": None}
+            st.session_state.pop("_resolved_key", None)
             st.rerun()
 
     # Chat input — at the bottom of the right column
@@ -168,6 +188,7 @@ if user_input:
         result = invoke_geodetic_agent(
             query=user_input,
             chat_history=st.session_state.messages,
+            agent=st.session_state["agent"],
         )
 
     if result.success:

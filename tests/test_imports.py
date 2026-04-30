@@ -15,9 +15,9 @@ class TestImports:
         import src.tools.geodesy  # noqa: F401
 
     def test_import_src_agents_geodetic(self):
-        """Agent module should import cleanly (LLM is instantiated at module level,
-        so we patch ChatGoogleGenerativeAI and create_agent)."""
-        with patch("langchain_google_genai.ChatGoogleGenerativeAI"), \
+        """Agent module should import cleanly (LLM factory and create_agent are
+        instantiated at module level, so we patch build_llm and create_agent)."""
+        with patch("src.agents.llm_factory.build_llm"), \
              patch("langchain.agents.create_agent"):
             import src.agents.geodetic
             importlib.reload(src.agents.geodetic)

@@ -11,17 +11,24 @@ from src.models.agent import AgentResponse, ToolCall
 from src.models.geodesy import BoundingBox, CRSResult
 
 
-def invoke_geodetic_agent(query: str, chat_history: list = None) -> AgentResponse:
+def invoke_geodetic_agent(
+    query: str,
+    chat_history: list = None,
+    agent=None,
+) -> AgentResponse:
     """
     Invoke the geodetic agent with a user query.
 
     Args:
         query: User query string
         chat_history: Optional list of previous messages for context
+        agent: Optional agent instance to use.  Defaults to the module-level
+            ``geodetic_agent`` when not provided.
 
     Returns:
         AgentResponse with response text, tool calls, success flag, and optional error.
     """
+    _agent = agent or geodetic_agent
     try:
         # Convert chat history to messages format expected by LangGraph agent
         messages = []
@@ -38,7 +45,7 @@ def invoke_geodetic_agent(query: str, chat_history: list = None) -> AgentRespons
 
         # Invoke agent with messages
         try:
-            result = geodetic_agent.invoke({"messages": messages})
+            result = _agent.invoke({"messages": messages})
         except Exception as e:
             raise AgentInvocationError(query, cause=e) from e
 

@@ -1,32 +1,31 @@
+"""Geodetic advisor agent module.
+
+Exposes :func:`create_geodetic_agent` to build the agent with either a Gemini
+LLM or a local Ollama LLM, and the module-level :data:`geodetic_agent`
+singleton for backward compatibility.
+"""
+
 import os
+
 from langchain.agents import create_agent
-from langchain_google_genai import ChatGoogleGenerativeAI
+
+from src.agents.llm_factory import build_llm
 from src.tools.geodesy import (
     get_bbox_from_areaname,
-    transform_coordinates,
     lookup_crs,
-    search_crs_objects
+    search_crs_objects,
+    transform_coordinates,
 )
 from src.tools.plot import plot_geojson
 
+# ---------------------------------------------------------------------------
+# Shared constants — same prompt and tools regardless of LLM provider
+# ---------------------------------------------------------------------------
 
-llm = ChatGoogleGenerativeAI(
-    model="models/gemini-3-flash-preview",
-    temperature=0,
-    max_tokens=None,
-    timeout=None,
-    max_retries=2,
-    google_api_key=os.getenv("GEMINI_API_KEY"),
-)
+TOOLS = [lookup_crs, transform_coordinates, get_bbox_from_areaname, search_crs_objects, plot_geojson]
 
-tools = [lookup_crs, transform_coordinates, get_bbox_from_areaname, search_crs_objects, plot_geojson]
-
-geodetic_agent = create_agent(
-    tools=tools,
-    model=llm,
-    debug=False,
-    system_prompt=(
-        """You are a geodetic advisor, with deep knowledge of geodesy, cartography, and geospatial positioning.
+SYSTEM_PROMPT = (
+    """You are a geodetic advisor, with deep knowledge of geodesy, cartography, and geospatial positioning.
         Use the EPSG Geodetic Parameter Registry and the provided tools to answer questions about coordinate reference systems, transformations, and geodetic metadata.
 
         IMPORTANT QUERY DECOMPOSITION STRATEGY:
@@ -74,5 +73,38 @@ geodetic_agent = create_agent(
             3. Call plot_geojson with that GeoJSON string.
             Do NOT skip plot_geojson. Do NOT just describe the area — you must call the tool.
         """
-    ),
 )
+
+
+# ---------------------------------------------------------------------------
+# Factory
+# ---------------------------------------------------------------------------
+
+
+def create_geodetic_agent(gemini_api_key: str | None = None):
+    """Create a geodetic advisor agent using the appropriate LLM.
+
+    When ``gemini_api_key`` is a non-empty string, ``ChatGoogleGenerativeAI``
+    is used.  Otherwise a local Ollama model is used.
+
+    Args:
+        gemini_api_key: Optional Gemini API key.  ``None`` or ``""`` triggers
+            the Ollama fallback.
+
+    Returns:
+        A LangGraph agent instance ready for invocation.
+    """
+    llm = build_llm(gemini_api_key)
+    return create_agent(
+        tools=TOOLS,
+        model=llm,
+        debug=False,
+        system_prompt=SYSTEM_PROMPT,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Module-level singleton — backward compatible default
+# ---------------------------------------------------------------------------
+
+geodetic_agent = create_geodetic_agent(os.getenv("GEMINI_API_KEY"))
