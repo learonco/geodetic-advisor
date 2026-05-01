@@ -97,22 +97,38 @@ with st.sidebar:
     )
     st.divider()
 
-    # Gemini API key — sidebar input overrides env var
-    env_key = os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY") or ""
-    gemini_key_input = st.text_input(
-        "Gemini API Key",
-        value=env_key,
-        type="password",
-        placeholder="Leave blank to use Ollama (local)",
-        help="Enter your Google Gemini API key, or leave blank to use a local Ollama model.",
+    # Provider selection — authoritative; credentials supplied separately
+    provider = st.radio(
+        "Model provider",
+        options=["ollama", "gemini"],
+        format_func=lambda x: "🦙 Ollama (local)" if x == "ollama" else "✨ Gemini",
+        index=0,
+        horizontal=True,
+        label_visibility="collapsed",
     )
-    resolved_key: str | None = gemini_key_input.strip() or None
 
-    if resolved_key:
-        st.success("✅ Using Gemini")
+    if provider == "gemini":
+        env_key = os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY") or ""
+        gemini_key_input = st.text_input(
+            "Gemini API Key",
+            value=env_key,
+            type="password",
+            placeholder="Enter your Google Gemini API key",
+            help="Your Google Gemini API key.",
+        )
+        gemini_key: str | None = gemini_key_input.strip() or None
+        ollama_url: str | None = None
         provider_label = "LangChain + Google Gemini"
     else:
-        st.info("🦙 Using Ollama (local)")
+        env_url = os.environ.get("OLLAMA_BASE_URL") or "http://localhost:11434"
+        ollama_url_input = st.text_input(
+            "Ollama URL",
+            value=env_url,
+            placeholder="http://localhost:11434",
+            help="Base URL of your local Ollama server.",
+        )
+        gemini_key = None
+        ollama_url = ollama_url_input.strip() or None
         provider_label = "LangChain + Ollama (local)"
 
     st.caption(f"Powered by {provider_label}")
@@ -128,11 +144,22 @@ if "messages" not in st.session_state:
 if "agent_state" not in st.session_state:
     st.session_state.agent_state = {"last_bbox": None, "last_results": [], "last_geojson": None}
 
-# Build or rebuild the agent when the resolved key changes
-_prev_key = st.session_state.get("_resolved_key", ...)
-if _prev_key is ... or _prev_key != resolved_key:
-    st.session_state["agent"] = create_geodetic_agent(resolved_key)
-    st.session_state["_resolved_key"] = resolved_key
+# Build or rebuild the agent when provider or credentials change
+_prev_provider = st.session_state.get("_provider", ...)
+_prev_gemini_key = st.session_state.get("_gemini_key", ...)
+_prev_ollama_url = st.session_state.get("_ollama_url", ...)
+if (
+    _prev_provider is ...
+    or _prev_provider != provider
+    or _prev_gemini_key != gemini_key
+    or _prev_ollama_url != ollama_url
+):
+    st.session_state["agent"] = create_geodetic_agent(
+        provider, gemini_api_key=gemini_key, ollama_url=ollama_url
+    )
+    st.session_state["_provider"] = provider
+    st.session_state["_gemini_key"] = gemini_key
+    st.session_state["_ollama_url"] = ollama_url
 
 # ---------------------------------------------------------------------------
 # Layout: map left (55 %) | chat right (45 %)

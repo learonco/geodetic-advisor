@@ -29,7 +29,7 @@ class TestCreateGeodeticAgent:
             return geodetic, mock_build_llm, mock_create_agent
 
     def test_create_geodetic_agent_with_key_calls_build_llm_with_key(self):
-        """Passing a Gemini key propagates it to build_llm."""
+        """Passing provider='gemini' and a key propagates both to build_llm."""
         mock_build = MagicMock(return_value=MagicMock())
         mock_create = MagicMock(return_value=MagicMock())
 
@@ -37,12 +37,12 @@ class TestCreateGeodeticAgent:
              patch("langchain.agents.create_agent", mock_create):
             from src.agents import geodetic
             importlib.reload(geodetic)
-            geodetic.create_geodetic_agent(gemini_api_key="my-key")
+            geodetic.create_geodetic_agent(provider="gemini", gemini_api_key="my-key")
 
-        mock_build.assert_called_with("my-key")
+        mock_build.assert_called_with("gemini", gemini_api_key="my-key", ollama_url=None)
 
     def test_create_geodetic_agent_without_key_calls_build_llm_with_none(self):
-        """Calling without a key passes None to build_llm."""
+        """Calling with provider='ollama' and no key passes ollama to build_llm."""
         mock_build = MagicMock(return_value=MagicMock())
         mock_create = MagicMock(return_value=MagicMock())
 
@@ -50,12 +50,9 @@ class TestCreateGeodeticAgent:
              patch("langchain.agents.create_agent", mock_create):
             from src.agents import geodetic
             importlib.reload(geodetic)
-            geodetic.create_geodetic_agent(gemini_api_key=None)
+            geodetic.create_geodetic_agent(provider="ollama", gemini_api_key=None)
 
-        # The module-level geodetic_agent also calls build_llm at import time;
-        # we only care that the last call used None.
-        calls = mock_build.call_args_list
-        assert any(c == call(None) for c in calls)
+        mock_build.assert_called_with("ollama", gemini_api_key=None, ollama_url=None)
 
     def test_create_geodetic_agent_returns_create_agent_result(self):
         """The factory returns whatever create_agent() returns."""
@@ -67,7 +64,7 @@ class TestCreateGeodeticAgent:
              patch("langchain.agents.create_agent", mock_create):
             from src.agents import geodetic
             importlib.reload(geodetic)
-            result = geodetic.create_geodetic_agent()
+            result = geodetic.create_geodetic_agent(provider="ollama")
 
         assert result is sentinel
 
@@ -80,12 +77,25 @@ class TestCreateGeodeticAgent:
              patch("langchain.agents.create_agent", mock_create):
             from src.agents import geodetic
             importlib.reload(geodetic)
-            geodetic.create_geodetic_agent()
+            geodetic.create_geodetic_agent(provider="ollama")
 
         # get the last call (the explicit factory call, not the module-level one)
         call_kwargs = mock_create.call_args.kwargs
         assert "tools" in call_kwargs
         assert len(call_kwargs["tools"]) > 0
+
+    def test_create_geodetic_agent_ollama_passes_url(self):
+        """An explicit ollama_url is propagated to build_llm."""
+        mock_build = MagicMock(return_value=MagicMock())
+        mock_create = MagicMock(return_value=MagicMock())
+
+        with patch("src.agents.llm_factory.build_llm", mock_build), \
+             patch("langchain.agents.create_agent", mock_create):
+            from src.agents import geodetic
+            importlib.reload(geodetic)
+            geodetic.create_geodetic_agent(provider="ollama", ollama_url="http://custom:11434")
+
+        mock_build.assert_called_with("ollama", gemini_api_key=None, ollama_url="http://custom:11434")
 
     def test_module_exposes_system_prompt_constant(self):
         """The module must expose a non-empty SYSTEM_PROMPT string constant."""
@@ -127,3 +137,38 @@ class TestCreateGeodeticAgent:
 
         assert hasattr(geodetic, "geodetic_agent")
         assert geodetic.geodetic_agent is not None
+
+    def test_module_level_agent_uses_provider_env_var(self, monkeypatch):
+        """GEODETIC_ADVISOR_PROVIDER env var controls the singleton's provider."""
+        monkeypatch.setenv("GEODETIC_ADVISOR_PROVIDER", "gemini")
+        monkeypatch.setenv("GEMINI_API_KEY", "env-gemini-key")
+        monkeypatch.delenv("OLLAMA_BASE_URL", raising=False)
+
+        mock_build = MagicMock(return_value=MagicMock())
+        mock_create = MagicMock(return_value=MagicMock())
+
+        with patch("src.agents.llm_factory.build_llm", mock_build), \
+             patch("langchain.agents.create_agent", mock_create):
+            from src.agents import geodetic
+            importlib.reload(geodetic)
+
+        first_call = mock_build.call_args_list[0]
+        assert first_call == call("gemini", gemini_api_key="env-gemini-key", ollama_url=None)
+
+    def test_module_level_agent_defaults_to_ollama_without_env_var(self, monkeypatch):
+        """Without GEODETIC_ADVISOR_PROVIDER set, the singleton defaults to 'ollama'."""
+        monkeypatch.delenv("GEODETIC_ADVISOR_PROVIDER", raising=False)
+        monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+        monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+        monkeypatch.delenv("OLLAMA_BASE_URL", raising=False)
+
+        mock_build = MagicMock(return_value=MagicMock())
+        mock_create = MagicMock(return_value=MagicMock())
+
+        with patch("src.agents.llm_factory.build_llm", mock_build), \
+             patch("langchain.agents.create_agent", mock_create):
+            from src.agents import geodetic
+            importlib.reload(geodetic)
+
+        first_call = mock_build.call_args_list[0]
+        assert first_call == call("ollama", gemini_api_key=None, ollama_url=None)

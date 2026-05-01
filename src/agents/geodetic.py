@@ -2,7 +2,8 @@
 
 Exposes :func:`create_geodetic_agent` to build the agent with either a Gemini
 LLM or a local Ollama LLM, and the module-level :data:`geodetic_agent`
-singleton for backward compatibility.
+singleton whose provider is controlled by the ``GEODETIC_ADVISOR_PROVIDER``
+environment variable (default: ``"ollama"``).
 """
 
 import os
@@ -81,20 +82,27 @@ SYSTEM_PROMPT = (
 # ---------------------------------------------------------------------------
 
 
-def create_geodetic_agent(gemini_api_key: str | None = None):
-    """Create a geodetic advisor agent using the appropriate LLM.
-
-    When ``gemini_api_key`` is a non-empty string, ``ChatGoogleGenerativeAI``
-    is used.  Otherwise a local Ollama model is used.
+def create_geodetic_agent(
+    provider: str,
+    gemini_api_key: str | None = None,
+    ollama_url: str | None = None,
+):
+    """Create a geodetic advisor agent using the specified LLM provider.
 
     Args:
-        gemini_api_key: Optional Gemini API key.  ``None`` or ``""`` triggers
-            the Ollama fallback.
+        provider: Which LLM backend to use — ``"gemini"`` or ``"ollama"``.
+            This argument is required; provider selection is never inferred
+            from credential presence.
+        gemini_api_key: Google Gemini API key.  Only used when
+            ``provider="gemini"``.
+        ollama_url: Base URL for the Ollama server.  Only used when
+            ``provider="ollama"``.  Falls back to the ``OLLAMA_BASE_URL``
+            environment variable, then ``http://localhost:11434``.
 
     Returns:
         A LangGraph agent instance ready for invocation.
     """
-    llm = build_llm(gemini_api_key)
+    llm = build_llm(provider, gemini_api_key=gemini_api_key, ollama_url=ollama_url)
     return create_agent(
         tools=TOOLS,
         model=llm,
@@ -104,7 +112,14 @@ def create_geodetic_agent(gemini_api_key: str | None = None):
 
 
 # ---------------------------------------------------------------------------
-# Module-level singleton — backward compatible default
+# Module-level singleton — provider driven by GEODETIC_ADVISOR_PROVIDER env var
 # ---------------------------------------------------------------------------
 
-geodetic_agent = create_geodetic_agent(os.getenv("GEMINI_API_KEY"))
+_provider = os.getenv("GEODETIC_ADVISOR_PROVIDER", "ollama")
+_gemini_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+_ollama_url = os.getenv("OLLAMA_BASE_URL") or None
+geodetic_agent = create_geodetic_agent(
+    provider=_provider,
+    gemini_api_key=_gemini_key,
+    ollama_url=_ollama_url,
+)
