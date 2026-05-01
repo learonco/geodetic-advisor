@@ -6,6 +6,8 @@ the application, including bounding boxes and CRS results.
 
 from __future__ import annotations
 
+from geojson_pydantic import Feature, FeatureCollection
+from geojson_pydantic.geometries import Polygon
 from pydantic import BaseModel, field_validator, model_validator
 
 
@@ -60,3 +62,37 @@ class CRSResult(BaseModel):
     epsg_code: str
     crs_name: str
     area_bbox: BoundingBox | None = None
+
+
+class BboxPolygonFeatureCollection(FeatureCollection):
+    """A GeoJSON FeatureCollection containing one rectangular Polygon from a BoundingBox.
+
+    Use :meth:`from_bbox` to construct from a :class:`BoundingBox` and a name.
+    The resulting object is a valid ``geojson_pydantic.FeatureCollection`` and can
+    be serialised directly with ``model_dump_json()``.
+    """
+
+    @classmethod
+    def from_bbox(cls, bbox: BoundingBox, name: str) -> BboxPolygonFeatureCollection:
+        """Build a FeatureCollection with one closed rectangular Polygon.
+
+        Args:
+            bbox: The geographic bounding box to convert.
+            name: Value placed in the feature's ``properties.name`` field.
+
+        Returns:
+            A validated ``BboxPolygonFeatureCollection`` instance.
+        """
+        ring = [
+            (bbox.west, bbox.south),
+            (bbox.east, bbox.south),
+            (bbox.east, bbox.north),
+            (bbox.west, bbox.north),
+            (bbox.west, bbox.south),
+        ]
+        feature = Feature(
+            type="Feature",
+            geometry=Polygon(type="Polygon", coordinates=[ring]),
+            properties={"name": name},
+        )
+        return cls(type="FeatureCollection", features=[feature])

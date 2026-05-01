@@ -103,3 +103,50 @@ class TestPlotGeoJson:
 
         assert hasattr(plot_geojson, "run")
         assert callable(plot_geojson.run)
+
+
+class TestPlotBbox:
+    def test_valid_bbox_returns_geojson_string(self):
+        import json
+        from src.tools.plot import plot_bbox
+
+        result = plot_bbox.run({"west": -65.0, "south": -40.0, "east": -60.0, "north": -35.0, "name": "Test area"})
+        parsed = json.loads(result)
+        assert parsed["type"] == "FeatureCollection"
+
+    def test_result_has_one_polygon_feature(self):
+        import json
+        from src.tools.plot import plot_bbox
+
+        result = plot_bbox.run({"west": -65.0, "south": -40.0, "east": -60.0, "north": -35.0, "name": "Test area"})
+        parsed = json.loads(result)
+        assert len(parsed["features"]) == 1
+        assert parsed["features"][0]["geometry"]["type"] == "Polygon"
+
+    def test_result_properties_contain_name(self):
+        import json
+        from src.tools.plot import plot_bbox
+
+        result = plot_bbox.run({"west": -65.0, "south": -40.0, "east": -60.0, "north": -35.0, "name": "POSGAR 2007"})
+        parsed = json.loads(result)
+        assert parsed["features"][0]["properties"]["name"] == "POSGAR 2007"
+
+    def test_invalid_bbox_returns_error_string(self):
+        from src.tools.plot import plot_bbox
+
+        result = plot_bbox.run({"west": -65.0, "south": 50.0, "east": -60.0, "north": -35.0, "name": "Bad bbox"})
+        assert result.startswith("Error:")
+
+    def test_default_name_is_used_when_omitted(self):
+        import json
+        from src.tools.plot import plot_bbox
+
+        result = plot_bbox.run({"west": -65.0, "south": -40.0, "east": -60.0, "north": -35.0})
+        parsed = json.loads(result)
+        assert "name" in parsed["features"][0]["properties"]
+
+    def test_tool_has_run_method(self):
+        from src.tools.plot import plot_bbox
+
+        assert hasattr(plot_bbox, "run")
+        assert callable(plot_bbox.run)

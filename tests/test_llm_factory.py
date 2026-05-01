@@ -107,7 +107,7 @@ class TestBuildLlm:
             llm_factory.build_llm("gemini", gemini_api_key="any-key")
 
         call_kwargs = mock_cls.call_args.kwargs
-        assert call_kwargs["model"] == "models/gemini-2.0-flash"
+        assert call_kwargs["model"] == "models/gemini-3-flash-preview"
         assert call_kwargs["temperature"] == 0
         assert call_kwargs["max_retries"] == 2
 

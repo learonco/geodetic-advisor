@@ -3,7 +3,7 @@
 import pytest
 from pydantic import ValidationError
 
-from src.models.geodesy import BoundingBox, CRSResult
+from src.models.geodesy import BoundingBox, BboxPolygonFeatureCollection, CRSResult
 from src.models.agent import ToolCall, AgentResponse
 from src.models.chat import ChatMessage
 
@@ -179,3 +179,47 @@ class TestChatMessage:
         msg = ChatMessage(role="user", content="test")
         d = msg.model_dump()
         assert d["role"] == "user"
+
+
+# ---------------------------------------------------------------------------
+# BboxPolygonFeatureCollection
+# ---------------------------------------------------------------------------
+
+class TestBboxPolygonFeatureCollection:
+    _bbox = BoundingBox(west=-65.0, south=-40.0, east=-60.0, north=-35.0)
+
+    def test_from_bbox_returns_feature_collection(self):
+        fc = BboxPolygonFeatureCollection.from_bbox(self._bbox, name="Test area")
+        assert fc.type == "FeatureCollection"
+
+    def test_from_bbox_has_exactly_one_feature(self):
+        fc = BboxPolygonFeatureCollection.from_bbox(self._bbox, name="Test area")
+        assert len(fc.features) == 1
+
+    def test_from_bbox_feature_is_polygon(self):
+        fc = BboxPolygonFeatureCollection.from_bbox(self._bbox, name="Test area")
+        assert fc.features[0].geometry.type == "Polygon"
+
+    def test_from_bbox_polygon_ring_is_closed(self):
+        fc = BboxPolygonFeatureCollection.from_bbox(self._bbox, name="Test area")
+        ring = fc.features[0].geometry.coordinates[0]
+        assert ring[0] == ring[-1]
+
+    def test_from_bbox_polygon_uses_correct_corners(self):
+        fc = BboxPolygonFeatureCollection.from_bbox(self._bbox, name="Test area")
+        ring = fc.features[0].geometry.coordinates[0]
+        lons = {pt[0] for pt in ring}
+        lats = {pt[1] for pt in ring}
+        assert lons == {self._bbox.west, self._bbox.east}
+        assert lats == {self._bbox.south, self._bbox.north}
+
+    def test_from_bbox_properties_contain_name(self):
+        fc = BboxPolygonFeatureCollection.from_bbox(self._bbox, name="POSGAR 2007")
+        assert fc.features[0].properties["name"] == "POSGAR 2007"
+
+    def test_from_bbox_serializes_to_valid_geojson_string(self):
+        import json
+        fc = BboxPolygonFeatureCollection.from_bbox(self._bbox, name="Test area")
+        parsed = json.loads(fc.model_dump_json())
+        assert parsed["type"] == "FeatureCollection"
+        assert parsed["features"][0]["geometry"]["type"] == "Polygon"
