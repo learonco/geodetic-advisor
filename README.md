@@ -1,4 +1,4 @@
-# Geodetic AI-visor
+# Geodetic Advisor
 
 > An intelligent conversational AI agent that puts deep geodetic expertise at your fingertips.
 
@@ -24,17 +24,21 @@ By combining a Large Language Model with a curated set of geodetic tools and the
 graph TD
     User([User]) -->|Natural language query| WebUI[Streamlit WebUI]
 
-    WebUI -->|Invoke agent| Agent["Geodetic Agent\n(LangChain + Gemini)"]
+    WebUI -->|Invoke agent| Agent["Geodetic Agent\n(LangChain + Gemini / Ollama)"]
 
     Agent -->|Tool call| T1[get_bbox_from_areaname]
     Agent -->|Tool call| T2[search_crs_objects]
     Agent -->|Tool call| T3[lookup_crs]
     Agent -->|Tool call| T4[transform_coordinates]
+    Agent -->|Tool call| T5[plot_bbox]
+    Agent -->|Tool call| T6[plot_geojson]
 
     T1 -->|Bounding box| Nominatim[(Nominatim\nGeocoding API)]
     T2 -->|CRS list| PyProj[(pyproj /\nEPSG Registry)]
     T3 -->|CRS metadata| PyProj
     T4 -->|Transformed coords| PyProj
+    T5 -->|GeoJSON FeatureCollection| WebUI
+    T6 -->|GeoJSON| WebUI
 
     Agent -->|Structured response| WebUI
     WebUI -->|Chat answer + map| User
@@ -44,11 +48,11 @@ graph TD
 
 | Layer | Technology |
 |---|---|
-| LLM | Google Gemini (via `langchain-google-genai`) |
+| LLM | Google Gemini (`langchain-google-genai`) or Ollama local models (`langchain-ollama`) |
 | Agent framework | LangChain |
 | Geodetic engine | pyproj + EPSG registry |
 | Geocoding | OpenStreetMap Nominatim |
-| Web UI | Streamlit + Folium |
+| Web UI | Streamlit + pydeck |
 
 ---
 
@@ -101,6 +105,32 @@ Transforms a coordinate pair between two EPSG reference systems.
 
 ---
 
+### `plot_bbox`
+Plots a bounding box as a rectangular polygon on the interactive map.
+
+| Parameter | Type | Description |
+|---|---|---|
+| `west` | `float` | Western longitude in decimal degrees |
+| `south` | `float` | Southern latitude in decimal degrees |
+| `east` | `float` | Eastern longitude in decimal degrees |
+| `north` | `float` | Northern latitude in decimal degrees |
+| `name` | `str` | Label shown in the map tooltip (default: `"Area"`) |
+
+**Returns:** A GeoJSON `FeatureCollection` string representing the bounding-box polygon.
+
+---
+
+### `plot_geojson`
+Plots an arbitrary GeoJSON object on the interactive map.
+
+| Parameter | Type | Description |
+|---|---|---|
+| `geojson` | `str` | A valid RFC 7946 GeoJSON string — `Feature`, `FeatureCollection`, or any geometry type |
+
+**Returns:** The original GeoJSON string if valid, or an error message.
+
+---
+
 ## Usage Examples
 
 ### Find datums applicable to a region
@@ -147,6 +177,19 @@ Transformed coordinates: (379,314.823614, 6,166,942.331708)
 
 ---
 
+### Visualise a CRS area of use on the map
+
+```
+User: Show me the area covered by EPSG:32720 on the map.
+
+Agent: → lookup_crs("32720")  →  west=-66, south=-80, east=-60, north=0
+       → plot_bbox(west=-66, south=-80, east=-60, north=0, name="WGS 84 / UTM zone 20S")
+
+[Interactive map updated with the bounding-box polygon]
+```
+
+---
+
 ## Getting Started
 
 ```bash
@@ -157,10 +200,30 @@ cd geodetic-advisor-ai-agent
 # Install dependencies
 uv sync
 
-# Set your Gemini API key
-export GEMINI_API_KEY=your_key_here   # Linux/macOS
-$env:GEMINI_API_KEY="your_key_here"   # Windows PowerShell
-
-# Launch the web UI
+# Launch the web UI (defaults to Ollama local provider)
 uv run streamlit run src/webui/app.py
+```
+
+The provider can be switched in the sidebar at runtime. For **Ollama** (default), make sure an Ollama server is running locally or set `OLLAMA_BASE_URL` to point to your server:
+
+```bash
+export OLLAMA_BASE_URL=http://localhost:11434   # Linux/macOS
+$env:OLLAMA_BASE_URL="http://localhost:11434"   # Windows PowerShell
+```
+
+For **Google Gemini**, supply your API key via the sidebar or an environment variable:
+
+```bash
+export GEMINI_API_KEY=your_key_here   # Linux/macOS (also accepted as GOOGLE_API_KEY)
+$env:GEMINI_API_KEY="your_key_here"   # Windows PowerShell
+```
+
+### Development
+
+```bash
+# Run tests
+uv run pytest
+
+# Lint
+uv run ruff check
 ```
